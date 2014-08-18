@@ -1,0 +1,483 @@
+<!DOCTYPE html>
+<html lang="en" xmlns="http://www.w3.org/1999/xhtml">
+<head>
+    <meta charset="utf-8"/>
+    <title>Text wrapping</title>
+    <link rel="shortcut icon" href="http://demos.telerik.com/kendo-ui/favicon.ico"/>
+    <link rel="stylesheet/less" type="text/css" href="kendo/styles/web/kendo.common.css"/>
+    <link rel="stylesheet/less" type="text/css" href="kendo/styles/web/kendo.default.css"/>
+    <style type="text/css">
+        html, body, #mainDiv {
+            height: 100%;
+            overflow: hidden;
+            width: 100%;
+            margin: 0;
+            font-family: "Segoe UI", Verdana, Tahoma, Arial, "Helvetica Neue", Helvetica, Sans-Serif;
+            font-size: 10pt;
+        }
+
+        #canvas {
+            height: 100%;
+            background-color: #fff;
+            margin: 0 auto;
+        }
+
+        #canvas .km-scroll-wrapper {
+            height: 100%;
+            position: relative;
+            width: 100%;
+        }
+
+        .shape {
+            float: left;
+            margin: 3px;
+            cursor: pointer;
+        }
+
+        .shape:hover {
+            background-color: rgba(0, 0, 0, 0.25);
+        }
+
+        .shape svg {
+            width: 50px;
+            max-height: 50px;
+        }
+
+        .shape h3 {
+
+            font-size: 10pt;
+            overflow: hidden;
+            font-weight: normal;
+            max-width: 45px;
+            font-variant: small-caps;
+        }
+
+
+    </style>
+
+    <script src="kendo/jquery.js"></script>
+    <script src="kendo/kendo.core.js"></script>
+    <script src="kendo/kendo.data.js"></script>
+    <script src="kendo/kendo.popup.js"></script>
+    <script src="kendo/kendo.list.js"></script>
+    <script src="kendo/kendo.dropdownlist.js"></script>
+    <script src="kendo/kendo.dataviz.core.js"></script>
+    <script src="kendo/kendo.dataviz.themes.js"></script>
+    <script src="kendo/kendo.userevents.js"></script>
+    <script src="kendo/kendo.draganddrop.js"></script>
+    <script src="kendo/kendo.slider.js"></script>
+    <script src="kendo/kendo.resizable.js"></script>
+    <script src="kendo/kendo.splitter.js"></script>
+    <script src="kendo/kendo.listview.js"></script>
+    <script src="kendo/kendo.colorpicker.js"></script>
+    <script src="kendo/kendo.menu.js"></script>
+    <script src="kendo/kendo.fx.js"></script>
+    <script src="kendo/kendo.mobile.scroller.js"></script>
+    <script src="kendo/kendo.button.js"></script>
+
+    <script src="kendo/dataviz/diagram/utils.js"></script>
+    <script src="kendo/dataviz/diagram/math.js"></script>
+    <script src="kendo/dataviz/diagram/layout.js"></script>
+    <script src="kendo/dataviz/diagram/svg.js"></script>
+    <script src="kendo/dataviz/diagram/services.js"></script>
+    <script src="kendo/dataviz/diagram/extensions.js"></script>
+    <script src="kendo/dataviz/diagram/dom.js"></script>
+
+</head>
+<body>
+<div id="canvas"></div>
+
+</body>
+<script>
+
+function getTransformString(matrix)
+{
+    return "matrix(" + matrix.a + " " + matrix.b + " " + matrix.c + " " + matrix.d + " " + matrix.e + " " + matrix.f + ")"
+}
+function textLayout(group)
+{
+    var m,
+            angle = 0,
+            scalex = 1,
+            scaley = 1,
+            parentBounds,
+            FULLTEXT = "fullText",
+            ATTR_HORIZONTAL = "horizontal",
+            ATTR_VERTICAL = "vertical",
+            ATTR_SCALABLE = "scalable",
+            MAXWIDTH_MARGIN = 30,
+            TEXT_SELECTOR = 'text[' + ATTR_SCALABLE + '= "false"]';
+
+
+    function makeSpan()
+    {
+        var span = document.createElementNS("http://www.w3.org/2000/svg", "tspan");
+        return span;
+    }
+
+    function getScalingFactorsFromSVGMatrix(m)
+    {
+        return [Math.sqrt(m.a * m.a + m.c * m.c), Math.sqrt(m.b * m.b + m.d * m.d)];
+    }
+
+    function getRotationAngleFromSVGMatrix(m)
+    { // in degrees
+        if(m.d === 0 && m.a === 0) return 0;
+        if(m.d !== 0)
+        {
+            return Math.atan2(m.b, m.d);// * 360 / Math.PI;
+        }
+        else
+        {
+            return -Math.atan2(m.c, m.a);// * 360 / Math.PI;
+        }
+    }
+
+    function getTextSize(textElement)
+    {
+        return textElement.getComputedTextLength();
+    }
+
+    function makeSpansForLines(lines, textElement)
+    {
+        var els = $(textElement);
+        var horizontal = els.attr(ATTR_HORIZONTAL) || "middle";
+        var vertical = els.attr(ATTR_VERTICAL) || "middle";
+        els.attr("x", 0);
+        els.attr("y", 0);
+        if(lines.length > 0)
+        {
+            var textHeight = getTextHeight(textElement);
+
+            els.empty();
+            var x = 0,
+                    y = 0,
+                    textLine,
+                    tspan;
+            switch(horizontal.toLowerCase())
+            {
+                case "left":
+                    els.attr("text-anchor", "start");
+                    x = MAXWIDTH_MARGIN / 2;
+                    break;
+                case "middle":
+                    els.attr("text-anchor", "middle");
+                    x = Math.max(parentBounds.width / (2 * scalex), 0);
+                    break;
+                case "right":
+                    els.attr("text-anchor", "end");
+                    x = parentBounds.width / scalex - MAXWIDTH_MARGIN / 2;
+                    break;
+            }
+            var totalHeight = textHeight * lines.length;
+            switch(vertical.toLowerCase())
+            {
+                case "top":
+                    y = 0;
+                    break;
+                case "middle":
+                    y = (parentBounds.height / scaley - totalHeight) / 2;
+                    break;
+                case "bottom":
+                    y = (( parentBounds.height + 10 ) / scaley) - totalHeight - MAXWIDTH_MARGIN / 2;
+                    break;
+            }
+            els.attr("y", y);
+            for(var i = 0; i < lines.length; i++)
+            {
+                textLine = lines[i];
+                tspan = makeSpan();
+                tspan.appendChild(document.createTextNode(textLine.content.join(' ')));
+                tspan.setAttribute("x", x);
+                tspan.setAttribute("dy", textHeight);
+                textElement.appendChild(tspan);
+            }
+        }
+    }
+
+    // splitting of the fullText into lines for the bounds of the parent node
+    function getTextLines(textElement)
+    {
+        var text = textElement[FULLTEXT],
+                lines = [];
+
+        if(text == null || text.length == 0)
+        {
+            return lines;
+        }
+        // usually lots of empty string in the split
+        var words = text.split(' ').filter(function(q)
+        {
+            return q.length > 0;
+        });
+
+        if(words.length === 1)
+        {
+            return lines;
+        }
+
+        var line = [];
+        var length = 0;
+        var prevLength = 0;
+        // note that the parentBounds are unscaled
+        var maxWidth = parentBounds.width / scalex - MAXWIDTH_MARGIN;
+
+        while(words.length)
+        {
+            var word = words[0];
+            textElement.textContent = line.join(' ') + ' ' + word;
+            length = getTextSize(textElement);
+            if(length > maxWidth)
+            {
+                if(line.length === 0)
+                {
+                    line.push(words.shift());
+                }
+                lines.push({
+                    parent : this,
+                    length : prevLength,
+                    content: line
+                });
+                line = [];
+            }
+            else
+            {
+                line.push(words.shift());
+            }
+            prevLength = length;
+            if(words.length == 0)
+            {
+                lines.push({
+                    parent : this,
+                    length : 0,
+                    content: line
+                });
+            }
+        }
+        if(lines.length === 0)
+        {
+            lines.push({
+                parent : this,
+                length : 0,
+                content: line
+            });
+        }
+        return lines;
+    }
+
+    // renders a test string to measure the height of the font
+    function getTextHeight(textElement)
+    {
+        var svg = textElement.ownerSVGElement;
+        textElement.textContent = "Prototyping";
+        var height = textElement.getBBox().height;
+        $(textElement).empty();
+        return height;
+    }
+
+    //unscales the text
+    function unscaleText(textElement)
+    {
+        var svg = textElement.ownerSVGElement;
+        var els = $(textElement);
+
+        m = svg.getTransformToElement(textElement.parentNode.childNodes[0]);
+        angle = getRotationAngleFromSVGMatrix(m);
+        var scales = getScalingFactorsFromSVGMatrix(m);
+        //var scalingGroup = textElement.parentNode.childNodes[0];
+        scalex = scales[0];
+        scaley = scales[1];
+
+        var transform = textElement.ownerSVGElement.createSVGTransform();
+        var list = textElement.transform.baseVal;
+        list.clear();
+
+       /* transform.setScale(1/scalex, 1/scaley);
+        list.appendItem(transform);*/
+
+        /* transform.setRotate(angle, parentBounds.width / 2, parentBounds.height / 2);
+         list.appendItem(transform);*/
+
+        transform = textElement.ownerSVGElement.createSVGTransform();
+        transform.setTranslate(0,0);
+        list.appendItem(transform);
+        list.consolidate();
+
+        /*if(angle !== 0)
+         {
+         angle=-angle;
+         //angle = -Math.round(angle * 36000 / Math.PI) * Math.PI / 36000;
+         var cos = Math.cos(angle);
+         var sin = Math.sin(angle);
+         m.a = m.a * cos + m.c * sin;
+         m.b = m.b * cos + m.d * sin;
+         m.c = -m.a * sin + m.c * cos;
+         m.d = -m.b * sin + m.d * cos;
+         }
+         // translation are done on the spans
+         m.e = m.f = 0;
+
+         textElement.setAttribute("transform", getTransformString(m));*/
+    }
+
+    function processTextElement(textElement, parentGroup)
+    {
+        // the unscaled bounds
+        parentBounds = {
+            width : parseInt(textElement.attributes["basewidth"].value),
+            height: parseInt(textElement.attributes["baseheight"].value)
+        };
+
+        // reset the text to its unscale form
+        unscaleText(textElement);
+
+        // split into tspans
+        var lines = getTextLines(textElement);
+
+        makeSpansForLines(lines, textElement);
+    }
+
+    // keeps the full text independently of the spans.
+    function cacheText(textElement, parentGroup)
+    {
+        // don't cache when the spans have been created or we'd need to concat the spans
+        if(!textElement.hasOwnProperty(FULLTEXT))
+        {
+            textElement[FULLTEXT] = textElement.textContent.trim();
+        }
+        $(textElement).empty();
+    }
+
+    //--------------------------------
+
+    var items = group.querySelectorAll(TEXT_SELECTOR);
+    for(var i = 0; i < items.length; i++)
+    {
+        var item = items[i];
+        // remove the text to calc the bounds of the parent otherwise the text contributes and skews the result
+        cacheText(item, group);
+        // layout the text contained in the cached 'fullText' property
+        processTextElement(item, group);
+    }
+
+}
+
+function update(shape)
+{
+    /*  var hor = $('input:radio[name=horizontal]:checked').val();
+     $(".lipsum").attr("horizontal", hor);
+     var ver = $('input:radio[name=vertical]:checked').val();
+     $(".lipsum").attr("vertical", ver);
+     var scalingValue = parseFloat($("#scaler").val());
+     var rotationValue = $("#rotater").val();
+     var fontValue = $("#fontscaler").val();
+     $(".lipsum").attr("font-size", fontValue);*/
+
+    /* ;
+     if(shape[0].transform === undefined)
+     {
+     shape.attr("transform", "");
+     }
+     var list = shape[0].transform.baseVal;
+     list.clear();
+
+     var transform = shape[0].ownerSVGElement.createSVGTransform();
+     transform.setTranslate(100 + i * 500, 100);
+     list.appendItem(transform);
+     transform = shape[0].ownerSVGElement.createSVGTransform();
+     transform.setRotate(rotationValue, 75 * scalingValue, 25 * scalingValue);
+     list.appendItem(transform);
+     list.consolidate();
+     */
+    textLayout(shape.visual.domElement);
+
+}
+function onload()
+{
+    /*$('input:radio[name=horizontal]').change(update);
+     $('input:radio[name=vertical]').change(update);
+     $('#scaler').change(update);
+     $('#rotater').change(update);
+     $('#fontscaler').change(update);*/
+    //update();
+    var diagramNS = window.kendo.dataviz.diagram,
+            Point = diagramNS.Point;
+    $("#canvas").kendoDiagram({
+        theme           : "metro",
+        itemBoundsChange: function(e)
+        {
+            update(e.item);
+        },
+
+        change          : function(e)
+        {
+            var i, item;
+            if(e.added)
+            {
+                for(i = 0; i < e.added.length; i++)
+                {
+                    item = e.added[i];
+                    var rootg= $(item)[0].visual.domElement;
+                  var b = item.bounds();
+                    var text = $(rootg).find("text");
+
+                    text.attr("scalable", "false");
+                    text.attr("horizontal", "left");
+                    text.attr("vertical", "middle");
+                    text.attr("baseWidth", b.width);
+                    text.attr("baseHeight", b.height);
+
+                    update(item);
+                }
+            }
+        }
+    });
+    var diagram = $("#canvas").data("kendoDiagram");
+    var shape = diagram.addShape({
+        background: "lightyellow",
+        stroke    : "Orange",
+        width     : 200,
+        height    : 120,
+        type:"svg",
+        definition: '<g><rect fill="lightyellow" stroke="Orange" width="200" height="120"/></g>',
+        content   : {
+            fontSize: 9,
+            text: "Travelers' Choice award-winning destinations are determined using an algorithm that takes into account the quality and quantity of reviews from TripAdvisor users. In addition to the top spots globally, there are also lists for a selection of countries, continents and regions."
+        }
+    });
+    shape.position(new Point(500, 300));
+
+     shape = diagram.addShape({
+        background: "lightyellow",
+        stroke    : "Orange",
+        width     : 350,
+        height    : 220,
+        type:"svg",
+        definition: '<g><rect fill="lightgreen" stroke="green" width="350" height="220"/></g>',
+        content   : {
+            fontSize: 13,
+            fontFamily: "Courier",
+            text: "Some of it is justified. That's because this time, the outbreak is different. In the past, Ebola rarely made it out of the remote forested areas of Africa."
+        }
+    });
+    shape.position(new Point(800, 300));
+
+ shape = diagram.addShape({
+        width     : 350,
+        height    : 220,
+        type:"svg",
+        definition: '<g><rect fill="lightpurple" stroke="green" width="350" height="220"/></g>',
+        content   : {
+            fontSize: 15,
+            fontFamily: "Verdana",
+            foreground:"White",
+            text: "Alweer druk diplomatiek overleg over de onrusten in Oekraïne vandaag. In een telefonisch gesprek bespraken de Britse premier Cameron (foto) en de Duitse bondskanselier Merkel de spanningen in Oekraïne en de dreiging van een militair ingrijpen. Beide leiders vinden het belangrijk om de illegale bezetting van overheidsgebouwen in het oosten van Oekraïne te veroordelen."
+        }
+    });
+    shape.position(new Point(500, 500));
+
+
+}
+$(document).ready(onload);
+</script>
+</html>

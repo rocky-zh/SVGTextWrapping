@@ -1,0 +1,479 @@
+<!DOCTYPE html>
+<html>
+<head lang="en">
+    <meta charset="UTF-8">
+    <title></title>
+    <script type="text/javascript" src="http://cdnjs.cloudflare.com/ajax/libs/jquery/2.1.0/jquery.min.js"></script>
+    <style type="text/css">
+        body {
+            font-family: "Segoe UI";
+            font-size: 10pt;
+        }
+    </style>
+
+</head>
+<body>
+<svg style="height:400px;width:1450px;background-color: white;">
+    <g id="shape1">
+        <g class="root">
+            <rect height="50" width="150" stroke-width="1" stroke="steelblue" fill="lightyellow"/>
+            <text class="lipsum"
+                  font-size="17"
+                  font-family="Segoe UI"
+                  stroke-width="0"
+                  scalable="false"
+                  horizontal="left"
+                  vertical="top"
+                  baseWidth="150"
+                  baseHeight="35"
+                  fill="steelblue">Lorem ipsum dolor sit amet, consectetur adipiscing elit. Curabitur a feugiat massa.
+                In
+                in venenatis lectus. Nulla facilisi. Nam mollis urna sit amet aliquet posuere. Curabitur vel lacus non
+                nibh gravida vehicula eget at enim.
+            </text>
+        </g>
+    </g>
+
+    <g id="shape2">
+        <g class="root">
+            <rect height="100" width="250" stroke-width="1" stroke="green" fill="lightgreen"/>
+            <text class="lipsum" scalable="false" horizontal="left" vertical="top"
+                  font-size="17"
+                  font-family="Segoe UI"
+                  stroke-width="0"
+                  baseWidth="250"
+                  baseHeight="100"
+                  fill="steelblue">Lorem ipsum dolor sit amet, consectetur adipiscing elit. Curabitur a feugiat massa.
+                In
+                in venenatis lectus. Nulla facilisi. Nam mollis urna sit amet aliquet posuere. Curabitur vel lacus non
+                nibh gravida vehicula eget at enim.
+            </text>
+        </g>
+    </g>
+
+</svg>
+<div>
+    <table>
+        <tr>
+            <td>Rotate:</td>
+            <td><input id="rotater" type="range" max="360" step="10" min="0" value="0" width="250"/></td>
+        </tr>
+        <tr>
+            <td>Scale:</td>
+            <td><input id="scaler" type="range" max="6" step="0.5" min="1" value="2" width="250"/></td>
+        </tr>
+        <tr>
+            <td>Font size:</td>
+            <td><input id="fontscaler" type="range" max="20" step="1" min="9" value="11" width="250"/></td>
+        </tr>
+        <tr>
+            <td>Horizontal:</td>
+            <td>
+                <input type="radio" value="Left" name="horizontal" checked/> Left
+                <input type="radio" value="Middle" name="horizontal"/> Middle
+                <input type="radio" value="Right" name="horizontal"/> Right
+
+            </td>
+        </tr>
+        <tr>
+            <td>Vertical:</td>
+            <td>
+                <input type="radio" value="Top" name="vertical" checked/> Top
+                <input type="radio" value="Middle" name="vertical"/> Middle
+                <input type="radio" value="Bottom" name="vertical"/> Bottom
+            </td>
+        </tr>
+    </table>
+</div>
+<script type="text/javascript">
+function getTransformString(matrix)
+{
+    return "matrix(" + matrix.a + " " + matrix.b + " " + matrix.c + " " + matrix.d + " " + matrix.e + " " + matrix.f + ")"
+}
+function textLayout(group)
+{
+    var m,
+            angle = 0,
+            scalex = 1,
+            scaley = 1,
+            parentBounds,
+            FULLTEXT = "fullText",
+            ATTR_HORIZONTAL = "horizontal",
+            ATTR_VERTICAL = "vertical",
+            ATTR_SCALABLE = "scalable",
+            MAXWIDTH_MARGIN = 30,
+            TEXT_SELECTOR = 'text[' + ATTR_SCALABLE + '= "false"]';
+
+    function get_metrics(el)
+    {
+        function pointToLineDist(A, B, P)
+        {
+            var nL = Math.sqrt((B.x - A.x) * (B.x - A.x) + (B.y - A.y) * (B.y - A.y));
+            return Math.abs((P.x - A.x) * (B.y - A.y) - (P.y - A.y) * (B.x - A.x)) / nL;
+        }
+
+        function dist(point1, point2)
+        {
+            var xs = 0,
+                    ys = 0;
+            xs = point2.x - point1.x;
+            xs = xs * xs;
+            ys = point2.y - point1.y;
+            ys = ys * ys;
+            return Math.sqrt(xs + ys);
+        }
+
+        var b = el.getBBox(),
+                objDOM = el,
+                svgDOM = objDOM.ownerSVGElement;
+        // Get the local to global matrix
+        var matrix = svgDOM.getTransformToElement(objDOM).inverse(),
+                oldp = [
+                    [b.x, b.y],
+                    [b.x + b.width, b.y],
+                    [b.x + b.width, b.y + b.height],
+                    [b.x, b.y + b.height]
+                ],
+                pt, newp = [],
+                obj = {},
+                i, pos = Number.POSITIVE_INFINITY,
+                neg = Number.NEGATIVE_INFINITY,
+                minX = pos,
+                minY = pos,
+                maxX = neg,
+                maxY = neg;
+
+        for(i = 0; i < 4; i++)
+        {
+            pt = svgDOM.createSVGPoint();
+            pt.x = oldp[i][0];
+            pt.y = oldp[i][1];
+            newp[i] = pt.matrixTransform(matrix);
+            if(newp[i].x < minX) minX = newp[i].x;
+            if(newp[i].y < minY) minY = newp[i].y;
+            if(newp[i].x > maxX) maxX = newp[i].x;
+            if(newp[i].y > maxY) maxY = newp[i].y;
+        }
+        // The next refers to the transformed object itself, not bbox
+        // newp[0] - newp[3] are the transformed object's corner
+        // points in clockwise order starting from top left corner
+        obj.newp = newp; // array of corner points
+        obj.width = pointToLineDist(newp[1], newp[2], newp[0]) || 0;
+        obj.height = pointToLineDist(newp[2], newp[3], newp[0]) || 0;
+        obj.toplen = dist(newp[0], newp[1]);
+        obj.rightlen = dist(newp[1], newp[2]);
+        obj.bottomlen = dist(newp[2], newp[3]);
+        obj.leftlen = dist(newp[3], newp[0]);
+        // The next refers to the transformed object's bounding box
+        obj.BBx = minX;
+        obj.BBy = minY;
+        obj.BBx2 = maxX;
+        obj.BBy2 = maxY;
+        obj.BBwidth = maxX - minX;
+        obj.BBheight = maxY - minY;
+        return obj;
+    }
+
+    function makeSpan()
+    {
+        var span = document.createElementNS("http://www.w3.org/2000/svg", "tspan");
+        return span;
+    }
+
+    function getScalingFactorsFromSVGMatrix(m)
+    {
+        return [Math.sqrt(m.a * m.a + m.c * m.c), Math.sqrt(m.b * m.b + m.d * m.d)];
+    }
+
+    function getRotationAngleFromSVGMatrix(m)
+    { // in degrees
+        if(m.d === 0 && m.a === 0) return 0;
+        if(m.d !== 0)
+        {
+            return Math.atan2(m.b, m.d);// * 360 / Math.PI;
+        }
+        else
+        {
+            return -Math.atan2(m.c, m.a);// * 360 / Math.PI;
+        }
+    }
+
+    function getTextSize(textElement)
+    {
+        return /*textElement["textLength"] ? textElement.textLength.baseVal.value :*/ textElement.getComputedTextLength();
+    }
+
+    function makeSpansForLines(lines, textElement)
+    {
+        var els = $(textElement);
+        var horizontal = els.attr(ATTR_HORIZONTAL) || "middle";
+        var vertical = els.attr(ATTR_VERTICAL) || "middle";
+        els.attr("x", 0);
+        els.attr("y", 0);
+        if(lines.length > 0)
+        {
+            var textHeight = getTextHeight(textElement);
+
+            els.empty();
+            var x = 0,
+                    y = 0,
+                    textLine,
+                    tspan;
+            switch(horizontal.toLowerCase())
+            {
+                case "left":
+                    els.attr("text-anchor", "start");
+                    x = MAXWIDTH_MARGIN / 2;
+                    break;
+                case "middle":
+                    els.attr("text-anchor", "middle");
+                    x = Math.max(parentBounds.width / (2 * scalex), 0);
+                    break;
+                case "right":
+                    els.attr("text-anchor", "end");
+                    x = parentBounds.width / scalex - MAXWIDTH_MARGIN / 2;
+                    break;
+            }
+            var totalHeight = textHeight * lines.length;
+            switch(vertical.toLowerCase())
+            {
+                case "top":
+                    y = 0;
+                    break;
+                case "middle":
+                    y = (parentBounds.height / scaley - totalHeight) / 2;
+                    break;
+                case "bottom":
+                    y = (( parentBounds.height + 10 ) / scaley) - totalHeight - MAXWIDTH_MARGIN / 2;
+                    break;
+            }
+            els.attr("y", y);
+            for(var i = 0; i < lines.length; i++)
+            {
+                textLine = lines[i];
+                tspan = makeSpan();
+                tspan.appendChild(document.createTextNode(textLine.content.join(' ')));
+                tspan.setAttribute("x", x);
+                tspan.setAttribute("dy", textHeight);
+                textElement.appendChild(tspan);
+            }
+        }
+    }
+
+    // splitting of the fullText into lines for the bounds of the parent node
+    function getTextLines(textElement)
+    {
+        var text = textElement[FULLTEXT],
+                lines = [];
+
+        if(text == null || text.length == 0)
+        {
+            return lines;
+        }
+        // usually lots of empty string in the split
+        var words = text.split(' ').filter(function(q)
+        {
+            return q.length > 0;
+        });
+
+        if(words.length === 1)
+        {
+            return lines;
+        }
+
+        var line = [];
+        var length = 0;
+        var prevLength = 0;
+        // note that the parentBounds are unscaled
+        var maxWidth = parentBounds.width / scalex - MAXWIDTH_MARGIN;
+
+        while(words.length)
+        {
+            var word = words[0];
+            textElement.textContent = line.join(' ') + ' ' + word;
+            length = getTextSize(textElement);
+            if(length > maxWidth)
+            {
+                if(line.length === 0)
+                {
+                    line.push(words.shift());
+                }
+                lines.push({
+                    parent : this,
+                    length : prevLength,
+                    content: line
+                });
+                line = [];
+            }
+            else
+            {
+                line.push(words.shift());
+            }
+            prevLength = length;
+            if(words.length == 0)
+            {
+                lines.push({
+                    parent : this,
+                    length : 0,
+                    content: line
+                });
+            }
+        }
+        if(lines.length === 0)
+        {
+            lines.push({
+                parent : this,
+                length : 0,
+                content: line
+            });
+        }
+        return lines;
+    }
+
+    // renders a test string to measure the height of the font
+    function getTextHeight(textElement)
+    {
+        var svg = textElement.ownerSVGElement;
+        textElement.textContent = "Prototyping";
+        var height = textElement.getBBox().height;
+        $(textElement).empty();
+        return height;
+    }
+
+    //unscales the text
+    function unscaleText(textElement)
+    {
+        var svg = textElement.ownerSVGElement;
+        var els = $(textElement);
+
+        m = svg.getTransformToElement(textElement.parentNode);
+        angle = getRotationAngleFromSVGMatrix(m);
+        var scales = getScalingFactorsFromSVGMatrix(m);
+        scalex = scales[0];
+        scaley = scales[1];
+
+        var transform = textElement.ownerSVGElement.createSVGTransform();
+        if(textElement.transform === undefined)
+        {
+            els.attr("transform", "");
+        }
+        var list = textElement.transform.baseVal;
+        list.clear();
+        transform = textElement.ownerSVGElement.createSVGTransform();
+        transform.setScale(scalex, scaley);
+        list.appendItem(transform);
+        /* transform.setRotate(angle, parentBounds.width / 2, parentBounds.height / 2);
+         list.appendItem(transform);*/
+        list.consolidate();
+
+        /*if(angle !== 0)
+         {
+         angle=-angle;
+         //angle = -Math.round(angle * 36000 / Math.PI) * Math.PI / 36000;
+         var cos = Math.cos(angle);
+         var sin = Math.sin(angle);
+         m.a = m.a * cos + m.c * sin;
+         m.b = m.b * cos + m.d * sin;
+         m.c = -m.a * sin + m.c * cos;
+         m.d = -m.b * sin + m.d * cos;
+         }
+         // translation are done on the spans
+         m.e = m.f = 0;
+
+         textElement.setAttribute("transform", getTransformString(m));*/
+    }
+
+    function processTextElement(textElement, parentGroup)
+    {
+        // the unscaled bounds
+        parentBounds = {
+            width : parseInt(textElement.attributes["basewidth"].value),
+            height: parseInt(textElement.attributes["baseheight"].value)
+        };
+
+        // reset the text to its unscale form
+        unscaleText(textElement);
+
+        // split into tspans
+        var lines = getTextLines(textElement);
+
+        makeSpansForLines(lines, textElement);
+    }
+
+    // keeps the full text independently of the spans.
+    function cacheText(textElement, parentGroup)
+    {
+        // don't cache when the spans have been created or we'd need to concat the spans
+        if(!textElement.hasOwnProperty(FULLTEXT))
+        {
+            textElement[FULLTEXT] = textElement.textContent.trim();
+        }
+        $(textElement).empty();
+    }
+
+    //--------------------------------
+
+    var items = group.querySelectorAll(TEXT_SELECTOR);
+    for(var i = 0; i < items.length; i++)
+    {
+        var item = items[i];
+        // remove the text to calc the bounds of the parent otherwise the text contributes and skews the result
+        cacheText(item, group);
+        // layout the text contained in the cached 'fullText' property
+        processTextElement(item, group);
+    }
+
+}
+
+function update()
+{
+    var hor = $('input:radio[name=horizontal]:checked').val();
+    $(".lipsum").attr("horizontal", hor);
+    var ver = $('input:radio[name=vertical]:checked').val();
+    $(".lipsum").attr("vertical", ver);
+    var scalingValue = parseFloat($("#scaler").val());
+    var rotationValue = $("#rotater").val();
+    var fontValue = $("#fontscaler").val();
+    $(".lipsum").attr("font-size", fontValue);
+
+    var shapes = [$("#shape1"), $("#shape2")];
+
+    for(var i = 0; i < shapes.length; i++)
+    {
+        var shape = shapes[i];
+        if(shape[0].transform === undefined)
+        {
+            shape.attr("transform", "");
+        }
+        var list = shape[0].transform.baseVal;
+        list.clear();
+
+        var transform = shape[0].ownerSVGElement.createSVGTransform();
+        transform.setTranslate(100 + i * 500, 100);
+        list.appendItem(transform);
+        transform = shape[0].ownerSVGElement.createSVGTransform();
+        transform.setRotate(rotationValue, 75 * scalingValue, 25 * scalingValue);
+        list.appendItem(transform);
+        list.consolidate();
+    }
+
+    [].forEach.call(document.querySelectorAll('.root'), function(e)
+    {
+        $(e).attr("transform", "scale(" + scalingValue + "," + scalingValue + ")");
+        textLayout(e);
+    });
+
+}
+function onload()
+{
+    $('input:radio[name=horizontal]').change(update);
+    $('input:radio[name=vertical]').change(update);
+    $('#scaler').change(update);
+    $('#rotater').change(update);
+    $('#fontscaler').change(update);
+    update();
+}
+$(document).ready(onload);
+</script>
+</body>
+</html>
